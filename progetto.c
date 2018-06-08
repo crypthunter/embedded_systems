@@ -3,6 +3,7 @@
 //---------------------------------------------------VARIABILI----------------------------------------------------------------------
 // 0 accelerometro, 1 temperatura, 2 display
 unsigned char select_interrupt;
+
 //-----------------------------------------------------------PWM--------------------------------------------------------------------
 //bottone e backlight
 sbit button = P3^7;
@@ -84,6 +85,13 @@ void init (void) {
 	//abilita smbus
 	ENSMB = 1;
 	AA = 1;
+}
+
+void timer3_init()
+{
+	ET3 = 1;
+	TH3 = BE;
+	TL3 = E6;
 }
 
 /*
