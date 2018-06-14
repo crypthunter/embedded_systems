@@ -150,8 +150,6 @@ void timer3() interrupt 14
 	//resetta flag overflow
 	TMR3CN &= 0x7f;
 }
-
-
 /*
 																	**********************************************************
 																	***********************GESTIONE PWM***********************
@@ -198,7 +196,7 @@ void pwm_setup()
 	//clock intero per il timer0
 	CKCON = 0x8;
 	//luminosità iniziale del backlight, 0 = luminosità massima
-	lumi = 250;
+	lumi = 0;
 	//abilita gli iinterrupt di timer0, timer1 e timer2
 	ET0 = 1;
 	ET1 = 1;
