@@ -9,7 +9,11 @@ unsigned char t3_overflow_temp = 0;
 unsigned char flag_mma = 0;
 unsigned char flag_temp = 0;
 unsigned char flag_display = 0;
-//-----------------------------------------------------------PWM--------------------------------------------------------------------
+unsigned char smBusy = 0;
+//tipo di azione che deve fare smbus
+// 0 = mma, 1 = display, 2 = temperatura
+unsigned char interrupt_type = 0;
+//------------------------------------------------------PWM--------------------------------------------------------------------------
 //bottone e backlight
 sbit button = P3^7;
 sbit backlight = P0^6;
@@ -54,9 +58,10 @@ unsigned char mma_pos = 0;
 unsigned char mma_init_finished = 0;
 unsigned char mma_read_ready = 0;
 
-code float buffer_x[8];
-code float buffer_y[8];
-code float buffer_z[8];
+float buffer_x[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+float buffer_y[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+float buffer_z[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+unsigned char buffer_pos = 0;
 
 int mma_value_read = 0;
 int i = 0;
@@ -107,6 +112,21 @@ void timer3_init()
 	TMR3CN |= 0x04;
 }
 
+void mma_initialize()
+{
+	//altrimenti non entra nell'interrupt
+	flag_mma = 1;
+	STA = 1;
+	while(!mma_init_finished);
+	//STO = 1;
+	//for(i = 0; i < 1000; i++);
+	mma_init_finished = 2;
+	flag_mma = 0;
+	smBusy = 0;
+	//corrisponde a nessuna azione da fare su smbus
+	interrupt_type = 99;
+}
+
 void timer3() interrupt 14
 {
 	t3_overflow_display ++;
@@ -129,7 +149,6 @@ void timer3() interrupt 14
 	TMR3L = 0xe6;
 	//resetta flag overflow
 	TMR3CN &= 0x7f;
-	
 }
 
 
@@ -179,7 +198,7 @@ void pwm_setup()
 	//clock intero per il timer0
 	CKCON = 0x8;
 	//luminosità iniziale del backlight, 0 = luminosità massima
-	lumi = 100;
+	lumi = 250;
 	//abilita gli iinterrupt di timer0, timer1 e timer2
 	ET0 = 1;
 	ET1 = 1;
@@ -294,7 +313,7 @@ void accelerometer_interrupt()
 			{
 				mma_pos = 0;
 				mma_init_finished = 1;
-				//STO = 1;
+				STO = 1;
 				//STA = 1;
 			}
 			switch(SMB0STA)
@@ -302,6 +321,7 @@ void accelerometer_interrupt()
 				case SMB_START:
 					SMB0DAT = MMA_WRITE;
 					STA = 0;
+					smBusy = 1;
 					break;
 				
 				//gli devo dare indirizzo di lettura
@@ -322,6 +342,7 @@ void accelerometer_interrupt()
 						if(!mma_read_ready)
 						{
 							SMB0DAT = XOUT;
+							//dice che mma è pronto a leggere
 							mma_read_ready = 1;
 						}
 						else
@@ -344,31 +365,71 @@ void accelerometer_interrupt()
 					break;
 				
 				case SMB_READ_NACK:
+					mma_value_read &= 00111111;
 					xyz[xyz_mma_pos] = TILT_Z[mma_value_read];
 					STO = 1;
 					AA = 1;
+					//reset flag e variabili
+					smBusy = 0;
+					flag_mma = 0;
+					mma_read_ready = 0;
+					xyz_mma_pos = 0;
+				
+					buffer_x[buffer_pos] = xyz[0];
+					buffer_y[buffer_pos] = xyz[1];
+					buffer_z[buffer_pos] = xyz[2];
+				
+					if(buffer_pos == 7)
+						buffer_pos = 0;
+					else
+						buffer_pos ++;
 					
 			}
 			SI = 0;
 }
 
+void display_interrupt()
+{
+	
+}
+
+void temp_interrupt()
+{
+	
+}
+
 void smBus() interrupt 7
 {
-	//i = 100;
-	accelerometer_interrupt();
+	if(interrupt_type == 0)
+		accelerometer_interrupt();
+	else if (interrupt_type == 1)
+		display_interrupt();
+	else
+		temp_interrupt();
 }
 
 void main()
 {
 	init();
 	pwm_setup();
+	mma_initialize();
 	timer3_init();
-	STA = 1;
-	while(!mma_init_finished);
-	STO = 1;
-	for(i = 0; i < 1000; i++);
-	mma_init_finished = 2; 
-	STA = 1;
-	
-	while(1);
+	while(1)
+	{
+		if(flag_mma == 1){
+			interrupt_type = 0;
+			STA = 1;
+			while(smBusy);
+		}
+		/*if (flag_display == 1){
+			interrupt_type = 1;
+			STA = 1;
+			while(smBusy);
+		}
+		if (flag_temp == 1){
+			interrupt_type = 2;
+			STA = 1;	
+			while(smBusy);
+		}*/
+	}
 }
