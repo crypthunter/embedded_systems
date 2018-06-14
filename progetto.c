@@ -3,7 +3,12 @@
 //---------------------------------------------------VARIABILI----------------------------------------------------------------------
 // 0 accelerometro, 1 temperatura, 2 display
 unsigned char select_interrupt;
-
+//quante volte va in overflow
+unsigned char t3_overflow_display = 0;
+unsigned char t3_overflow_temp = 0;
+unsigned char flag_mma = 0;
+unsigned char flag_temp = 0;
+unsigned char flag_display = 0;
 //-----------------------------------------------------------PWM--------------------------------------------------------------------
 //bottone e backlight
 sbit button = P3^7;
@@ -48,6 +53,11 @@ unsigned char mma_init [] = {MODE, 0x01};
 unsigned char mma_pos = 0;
 unsigned char mma_init_finished = 0;
 unsigned char mma_read_ready = 0;
+
+code float buffer_x[8];
+code float buffer_y[8];
+code float buffer_z[8];
+
 int mma_value_read = 0;
 int i = 0;
 float xyz[3];
@@ -89,10 +99,39 @@ void init (void) {
 
 void timer3_init()
 {
-	ET3 = 1;
-	TH3 = BE;
-	TL3 = E6;
+	TMR3H = 0xbe;
+	TMR3L = 0xe6;
+	//abilita iinterrupt timer3
+	EIE2 |= 0x01;
+	//fa partire il timer 3
+	TMR3CN |= 0x04;
 }
+
+void timer3() interrupt 14
+{
+	t3_overflow_display ++;
+	t3_overflow_temp ++;
+	//ogni volta che va in overflow (100ms)
+	flag_mma = 1;
+	if(t3_overflow_display == 3)
+	{
+		flag_display = 1;
+		t3_overflow_display = 0;
+	}
+	
+	if(t3_overflow_temp == 10)
+	{
+		flag_temp = 1;
+		t3_overflow_temp = 0;
+	}
+	
+	TMR3H = 0xbe;
+	TMR3L = 0xe6;
+	//resetta flag overflow
+	TMR3CN &= 0x7f;
+	
+}
+
 
 /*
 																	**********************************************************
@@ -323,6 +362,7 @@ void main()
 {
 	init();
 	pwm_setup();
+	timer3_init();
 	STA = 1;
 	while(!mma_init_finished);
 	STO = 1;

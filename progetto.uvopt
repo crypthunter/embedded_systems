@@ -144,9 +144,9 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>296</LineNumber>
+          <LineNumber>124</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>-16774489</Address>
+          <Address>-16774029</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
@@ -160,16 +160,16 @@
         <Bp>
           <Number>1</Number>
           <Type>0</Type>
-          <LineNumber>308</LineNumber>
+          <LineNumber>118</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>0</Address>
+          <Address>-16774040</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>0</BreakIfRCount>
-          <Filename>C:\Users\loren\Documents\Università\terzo anno\secondo semestre\sistemi embedded\laboratorio\progetto\progetto.c</Filename>
+          <BreakIfRCount>1</BreakIfRCount>
+          <Filename>PROGETTO.C</Filename>
           <ExecCommand></ExecCommand>
           <Expression></Expression>
         </Bp>
@@ -179,6 +179,16 @@
           <count>0</count>
           <WinNumber>1</WinNumber>
           <ItemText>xyz</ItemText>
+        </Ww>
+        <Ww>
+          <count>1</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>t3_overflow_display</ItemText>
+        </Ww>
+        <Ww>
+          <count>2</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>t3_overflow_temp</ItemText>
         </Ww>
       </WatchWindow1>
       <Tracepoint>
