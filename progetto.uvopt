@@ -180,12 +180,12 @@
         <Ww>
           <count>7</count>
           <WinNumber>1</WinNumber>
-          <ItemText>STO</ItemText>
+          <ItemText>SMB0STA</ItemText>
         </Ww>
         <Ww>
           <count>8</count>
           <WinNumber>1</WinNumber>
-          <ItemText>STA</ItemText>
+          <ItemText>SMB0DAT</ItemText>
         </Ww>
         <Ww>
           <count>9</count>
@@ -211,6 +211,11 @@
           <count>13</count>
           <WinNumber>1</WinNumber>
           <ItemText>buffer_z</ItemText>
+        </Ww>
+        <Ww>
+          <count>14</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>display_init_pos</ItemText>
         </Ww>
       </WatchWindow1>
       <Tracepoint>

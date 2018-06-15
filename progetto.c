@@ -72,7 +72,13 @@ code float TILT_XY[64] = {0, 2.69, 5.38, 8.08, 10.81, 13.55, 16.33, 19.16, 22.02
 code float TILT_Z[64] = {90.00, 87.31, 84.62, 81.92, 79.19, 76.45, 73.67, 70.84, 67.98, 65.05, 62.05, 58.96, 55.77, 52.46, 48.99, 45.32, 41.41, 37.17, 32.46, 27.05, 20.36, 10.14, 0, 0, 0, 0, 0, 0, 
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -10.14, -20.36, -27.05, -32.46, -37.17, -41.41, -45.32, -48.99, -52.46, -55.77, -58.96, -62.05, -65.05, -67.98, -70.84, -73.67, -76.45, -79.19, -81.92, -84.62};
 
-	
+//---------------------------------------DISPLAY---------------------------------------------
+unsigned char display_init_values[] = {0x38, 0x39, 0x14, 0x74, 0x54, 0x6F, 0x0C, 0x01, 0x40, 'm','o','r','r','i','s' };	
+//variabile che indica se l'init è finito
+unsigned char display_init = 0;
+unsigned char display_init_pos = 0;
+unsigned char morris[] = {'m','o','r','r','i','s', ' '};
+unsigned char cont = 0;
 //---------------------------------------PROGRAMMA-------------------------------------------
 void init (void) {
 	//abilita iinterrupt globali
@@ -319,7 +325,7 @@ void accelerometer_interrupt()
 				case SMB_START:
 					SMB0DAT = MMA_WRITE;
 					STA = 0;
-					smBusy = 1;
+					//smBusy = 1;
 					break;
 				
 				//gli devo dare indirizzo di lettura
@@ -389,6 +395,45 @@ void accelerometer_interrupt()
 void display_interrupt()
 {
 	
+	switch(SMB0STA)
+	{
+		//primo start
+		case SMB_START:
+			//smBusy = 1;
+			SMB0DAT = DISPLAY_WRITE; // carica indirizzo slave display
+			STA = 0;
+			break;
+		
+		case SMB_FIRSTWRITE:
+		case SMB_WRITE:
+			if(!display_init)
+			{
+				SMB0DAT = display_init_values[display_init_pos];
+				display_init_pos++;
+			}
+		/*	else
+			{
+				if(cont == 0)
+					SMB0DAT = 0x40;
+				else
+				{
+					SMB0DAT = cont;
+					cont++;
+					//STO = 1;
+					smBusy = 0;
+				}
+			}*/
+			break;
+	}
+	
+	SI = 0;
+	if (display_init_pos == sizeof(display_init_values))
+	{
+		display_init = 1;
+		smBusy = 0;
+		STO = 1;
+		flag_display = 0;
+	}
 }
 
 void temp_interrupt()
@@ -417,13 +462,16 @@ void main()
 		if(flag_mma == 1){
 			interrupt_type = 0;
 			STA = 1;
+			smBusy = 1;
 			while(smBusy);
 		}
-		/*if (flag_display == 1){
+		if (flag_display == 1){
 			interrupt_type = 1;
 			STA = 1;
+			smBusy = 1;
 			while(smBusy);
 		}
+		/*
 		if (flag_temp == 1){
 			interrupt_type = 2;
 			STA = 1;	
