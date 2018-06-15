@@ -73,12 +73,14 @@ code float TILT_Z[64] = {90.00, 87.31, 84.62, 81.92, 79.19, 76.45, 73.67, 70.84,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -10.14, -20.36, -27.05, -32.46, -37.17, -41.41, -45.32, -48.99, -52.46, -55.77, -58.96, -62.05, -65.05, -67.98, -70.84, -73.67, -76.45, -79.19, -81.92, -84.62};
 
 //---------------------------------------DISPLAY---------------------------------------------
-unsigned char display_init_values[] = {0x38, 0x39, 0x14, 0x74, 0x54, 0x6F, 0x0C, 0x01, 0x40, 'm','o','r','r','i','s' };	
+unsigned char display_init_values[] = {0x38, 0x39, 0x14, 0x74, 0x54, 0x6F, 0x0C, 0x01, 0x40, 'f', 'i', 'n', 'i', 't', 'o'};	
 //variabile che indica se l'init è finito
 unsigned char display_init = 0;
 unsigned char display_init_pos = 0;
-unsigned char morris[] = {'m','o','r','r','i','s', ' '};
 unsigned char cont = 0;
+unsigned char cont1 = 0;
+unsigned char write_finished = 0;
+unsigned char display_values[] = {'a','b','c','d','e','f','g'};
 //---------------------------------------PROGRAMMA-------------------------------------------
 void init (void) {
 	//abilita iinterrupt globali
@@ -406,34 +408,52 @@ void display_interrupt()
 		
 		case SMB_FIRSTWRITE:
 		case SMB_WRITE:
-			if(!display_init)
+			if(display_init == 0)
 			{
 				SMB0DAT = display_init_values[display_init_pos];
 				display_init_pos++;
 			}
-		/*	else
+			//scritture successive all'init
+		 else if (display_init == 2)
 			{
 				if(cont == 0)
-					SMB0DAT = 0x40;
-				else
 				{
-					SMB0DAT = cont;
+					SMB0DAT = 0x40;
 					cont++;
-					//STO = 1;
-					smBusy = 0;
 				}
-			}*/
+				else if (cont != 5)
+				{
+					SMB0DAT = 'a' + cont;
+					cont++;
+				}
+				else if(cont == 5)
+				{
+					STO = 1;
+					smBusy = 0;
+					flag_display = 0;
+					cont = 0;
+				}
+					
+			}
 			break;
 	}
 	
 	SI = 0;
-	if (display_init_pos == sizeof(display_init_values))
+
+	if (display_init == 1)
 	{
-		display_init = 1;
+		display_init = 2;
 		smBusy = 0;
+	}
+		//gli serve un altro giro per fermarsi
+	else if (display_init_pos == sizeof(display_init_values))
+	{
+		display_init_pos = 0;
+		display_init = 1;
 		STO = 1;
 		flag_display = 0;
 	}
+	
 }
 
 void temp_interrupt()
