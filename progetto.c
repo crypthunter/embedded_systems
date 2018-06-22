@@ -15,9 +15,9 @@ unsigned char smBusy = 0;
 unsigned char interrupt_type = 0;
 //variabili per la media
 unsigned char avg_cont = 0;
-unsigned char avg_x = 0;
-unsigned char avg_y = 0;
-unsigned char avg_z = 0;
+int avg_x = 0;
+int avg_y = 0;
+int avg_z = 0;
 //------------------------------------------------------PWM--------------------------------------------------------------------------
 //bottone e backlight
 sbit button = P3^7;
@@ -47,7 +47,7 @@ unsigned char lumi;
 #define MMA_WRITE 0x98 //indirizzo per scrivere sull'accelerometro
 #define MMA_READ 0x99  //indirizzo per leggere dall'accelerometro
 
-#define TMP_READ 0x91  //indirizzo per leggere dal termometro
+#define TEMP_READ 0x91  //indirizzo per leggere dal termometro
 
 #define DISPLAY_WRITE 0x7c  //indirizzo per leggere dal display
 
@@ -63,9 +63,9 @@ unsigned char mma_pos = 0;
 unsigned char mma_init_finished = 0;
 unsigned char mma_read_ready = 0;
 
-float buffer_x[8] = {99, 99, 99, 99, 99, 99, 99, 99};
-float buffer_y[8] = {99, 99, 99, 99, 99, 99, 99, 99};
-float buffer_z[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+char buffer_x[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+char buffer_y[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+char buffer_z[8] = {99, 99, 99, 99, 99, 99, 99, 99};
 unsigned char buffer_pos = 0;
 
 int mma_value_read = 0;
@@ -86,6 +86,15 @@ unsigned char display_init_pos = 0;
 unsigned char cont = 0;
 unsigned char cont1 = 0;
 unsigned char write_finished = 0;
+//---------------------------------------TEMPERATURA-----------------------------------------
+int tempH = 0;
+int tempL = 0;
+//variabile che indica se ho letto la parte alta della temperatura
+unsigned char readH = 0;	
+float temp_float = 0;
+int temp_int = 0;
+int decine = 0;
+int unita = 0;
 //---------------------------------------PROGRAMMA-------------------------------------------
 void init (void) {
 	//abilita iinterrupt globali
@@ -455,7 +464,40 @@ void display_interrupt()
 
 void temp_interrupt()
 {
-	
+	switch(SMB0STA)
+	{
+		case SMB_START:
+			SMB0DAT = TEMP_READ;
+			STA = 0;
+			break;
+		case SMB_FIRSTREAD:
+			STA = 0;
+			break;
+		case SMB_READ:
+			if(readH == 0)
+			{
+				tempH = SMB0DAT;
+				readH = 1;
+			}
+			else
+			{
+				//calcola la parte bassa della temperatura
+				tempL = SMB0DAT;
+				temp_int = (tempH << 8 | tempL);
+				//calcola la temperatura reale
+				temp_float = (float)( temp_int >> 3 ) / 16;
+				//per scrivere sul display estraggo decine e unità
+				decine = (int)temp_float / 10 + 48;
+				unita = (int)temp_float % 10 + 48;
+				
+				display_values[5] = (char)decine;
+				display_values[6] = (char)unita;
+				
+				STO = 1;
+				smBusy = 0;
+			}
+			break;
+	}
 }
 
 void smBus() interrupt 7
@@ -464,7 +506,7 @@ void smBus() interrupt 7
 		accelerometer_interrupt();
 	else if (interrupt_type == 1)
 		display_interrupt();
-	else
+	else if (interrupt_type == 2)
 		temp_interrupt();
 }
 
@@ -480,8 +522,15 @@ void average_xyz()
 	avg_y /= sizeof(buffer_y);
 	avg_z /= sizeof(buffer_z);
 	
-	display_values[12] = avg_x / 10;
-	display_values[13] = avg_x % 10;
+	display_values[12] = (char)(avg_x / 10 + 48);
+	display_values[13] = (char)(avg_x % 10 + 48);
+	
+	display_values[16] = (char)(avg_y / 10 + 48);
+	display_values[17] = (char)(avg_y % 10 + 48);
+	
+	display_values[20] = (char)(avg_z / 10 + 48);
+	display_values[21] = (char)(avg_z % 10 + 48);
+
 }
 
 void main()
@@ -496,20 +545,21 @@ void main()
 			interrupt_type = 0;
 			STA = 1;
 			smBusy = 1;
-			while(smBusy)
-				average_xyz();
+			while(smBusy);
 		}
 		if (flag_display == 1){
 			interrupt_type = 1;
 			STA = 1;
 			smBusy = 1;
-			while(smBusy)
-				average_xyz();
+			while(smBusy);
 		}
-		/*
-		if (flag_temp == 1){
+		average_xyz();
+		
+		/*if (flag_temp == 1){
 			interrupt_type = 2;
-			STA = 1;	
+			AA = 1;
+			STA = 1;
+			smBusy = 1;
 			while(smBusy);
 		}*/
 		

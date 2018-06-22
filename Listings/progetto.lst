@@ -1,9 +1,9 @@
-C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 16:18:01 PAGE 1   
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 1   
 
 
 C51 COMPILER V9.57.0.0, COMPILATION OF MODULE PROGETTO
 OBJECT MODULE PLACED IN .\Objects\progetto.obj
-COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE progetto.c LARGE OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Lis
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE progetto.c LARGE OPTIMIZE(0,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Lis
                     -tings\progetto.lst) TABS(2) OBJECT(.\Objects\progetto.obj)
 
 line level    source
@@ -26,9 +26,9 @@ line level    source
   15          unsigned char interrupt_type = 0;
   16          //variabili per la media
   17          unsigned char avg_cont = 0;
-  18          unsigned char avg_x = 0;
-  19          unsigned char avg_y = 0;
-  20          unsigned char avg_z = 0;
+  18          int avg_x = 0;
+  19          int avg_y = 0;
+  20          int avg_z = 0;
   21          //------------------------------------------------------PWM-----------------------------------------------
              ----------------------------
   22          //bottone e backlight
@@ -61,8 +61,8 @@ line level    source
   47          #define MMA_WRITE 0x98 //indirizzo per scrivere sull'accelerometro
   48          #define MMA_READ 0x99  //indirizzo per leggere dall'accelerometro
   49          
-  50          #define TMP_READ 0x91  //indirizzo per leggere dal termometro
-C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 16:18:01 PAGE 2   
+  50          #define TEMP_READ 0x91  //indirizzo per leggere dal termometro
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 2   
 
   51          
   52          #define DISPLAY_WRITE 0x7c  //indirizzo per leggere dal display
@@ -80,9 +80,9 @@ line level    source
   63          unsigned char mma_init_finished = 0;
   64          unsigned char mma_read_ready = 0;
   65          
-  66          float buffer_x[8] = {99, 99, 99, 99, 99, 99, 99, 99};
-  67          float buffer_y[8] = {99, 99, 99, 99, 99, 99, 99, 99};
-  68          float buffer_z[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+  66          char buffer_x[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+  67          char buffer_y[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+  68          char buffer_z[8] = {99, 99, 99, 99, 99, 99, 99, 99};
   69          unsigned char buffer_pos = 0;
   70          
   71          int mma_value_read = 0;
@@ -108,456 +108,508 @@ line level    source
   86          unsigned char cont = 0;
   87          unsigned char cont1 = 0;
   88          unsigned char write_finished = 0;
-  89          //---------------------------------------PROGRAMMA-------------------------------------------
-  90          void init (void) {
-  91   1        //abilita iinterrupt globali
-  92   1        EA = 1;
-  93   1        //disabilita watchdog timer
-  94   1        WDTCN = 0xde;
-  95   1        WDTCN = 0xad; 
-  96   1        //oscillatore
-  97   1        OSCICN &= 0x14;
-  98   1        //clock interno
-  99   1        XBR0 = 0x00;
- 100   1        //abilita smbus e uart ( per spostare i pin)
- 101   1        XBR0 |= 0x05;
- 102   1        //crossbar, gestisce i pin
- 103   1        XBR1 = 0x00;
- 104   1        XBR2 = 0x40;
- 105   1        //push-pull
- 106   1        P1MDOUT |= 0x40;
-C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 16:18:01 PAGE 3   
+  89          //---------------------------------------TEMPERATURA-----------------------------------------
+  90          int tempH = 0;
+  91          int tempL = 0;
+  92          //variabile che indica se ho letto la parte alta della temperatura
+  93          unsigned char readH = 0;  
+  94          float temp_float = 0;
+  95          int temp_int = 0;
+  96          int decine = 0;
+  97          int unita = 0;
+  98          //---------------------------------------PROGRAMMA-------------------------------------------
+  99          void init (void) {
+ 100   1        //abilita iinterrupt globali
+ 101   1        EA = 1;
+ 102   1        //disabilita watchdog timer
+ 103   1        WDTCN = 0xde;
+ 104   1        WDTCN = 0xad; 
+ 105   1        //oscillatore
+ 106   1        OSCICN &= 0x14;
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 3   
 
- 107   1        //push pull display
- 108   1        P0MDOUT |= 0x40;
- 109   1        //per l'interrupt del bottone
- 110   1        EIE2 |= 0x20;
- 111   1        //iinterrupt del smbus
- 112   1        EIE1 |= 0x02;
- 113   1        //abilita smbus
- 114   1        ENSMB = 1;
- 115   1        AA = 1;
- 116   1      }
- 117          
- 118          void timer3_init()
- 119          {
- 120   1        TMR3H = 0xbe;
- 121   1        TMR3L = 0xe6;
- 122   1        //abilita iinterrupt timer3
- 123   1        EIE2 |= 0x01;
- 124   1        //fa partire il timer 3
- 125   1        TMR3CN |= 0x04;
- 126   1      }
- 127          
- 128          void mma_initialize()
- 129          {
- 130   1        //altrimenti non entra nell'interrupt
- 131   1        flag_mma = 1;
- 132   1        STA = 1;
- 133   1        while(!mma_init_finished);
- 134   1        //STO = 1;
- 135   1        //for(i = 0; i < 1000; i++);
- 136   1        mma_init_finished = 2;
- 137   1        flag_mma = 0;
- 138   1        smBusy = 0;
- 139   1        //corrisponde a nessuna azione da fare su smbus
- 140   1        interrupt_type = 99;
- 141   1      }
- 142          
- 143          void timer3() interrupt 14
- 144          {
- 145   1        t3_overflow_display ++;
- 146   1        t3_overflow_temp ++;
- 147   1        //ogni volta che va in overflow (100ms)
- 148   1        flag_mma = 1;
- 149   1        if(t3_overflow_display == 3)
- 150   1        {
- 151   2          flag_display = 1;
- 152   2          t3_overflow_display = 0;
- 153   2        }
- 154   1        
- 155   1        if(t3_overflow_temp == 10)
- 156   1        {
- 157   2          flag_temp = 1;
- 158   2          t3_overflow_temp = 0;
- 159   2        }
- 160   1        
- 161   1        TMR3H = 0xbe;
- 162   1        TMR3L = 0xe6;
- 163   1        //resetta flag overflow
- 164   1        TMR3CN &= 0x7f;
- 165   1      }
- 166          /*
- 167                                            **********************************************************
- 168                                            ***********************GESTIONE PWM***********************
-C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 16:18:01 PAGE 4   
+ 107   1        //clock interno
+ 108   1        XBR0 = 0x00;
+ 109   1        //abilita smbus e uart ( per spostare i pin)
+ 110   1        XBR0 |= 0x05;
+ 111   1        //crossbar, gestisce i pin
+ 112   1        XBR1 = 0x00;
+ 113   1        XBR2 = 0x40;
+ 114   1        //push-pull
+ 115   1        P1MDOUT |= 0x40;
+ 116   1        //push pull display
+ 117   1        P0MDOUT |= 0x40;
+ 118   1        //per l'interrupt del bottone
+ 119   1        EIE2 |= 0x20;
+ 120   1        //iinterrupt del smbus
+ 121   1        EIE1 |= 0x02;
+ 122   1        //abilita smbus
+ 123   1        ENSMB = 1;
+ 124   1        AA = 1;
+ 125   1      }
+ 126          
+ 127          void timer3_init()
+ 128          {
+ 129   1        TMR3H = 0xbe;
+ 130   1        TMR3L = 0xe6;
+ 131   1        //abilita iinterrupt timer3
+ 132   1        EIE2 |= 0x01;
+ 133   1        //fa partire il timer 3
+ 134   1        TMR3CN |= 0x04;
+ 135   1      }
+ 136          
+ 137          void mma_initialize()
+ 138          {
+ 139   1        //altrimenti non entra nell'interrupt
+ 140   1        flag_mma = 1;
+ 141   1        STA = 1;
+ 142   1        while(!mma_init_finished);
+ 143   1        //STO = 1;
+ 144   1        //for(i = 0; i < 1000; i++);
+ 145   1        mma_init_finished = 2;
+ 146   1        flag_mma = 0;
+ 147   1        smBusy = 0;
+ 148   1        //corrisponde a nessuna azione da fare su smbus
+ 149   1        interrupt_type = 99;
+ 150   1      }
+ 151          
+ 152          void timer3() interrupt 14
+ 153          {
+ 154   1        t3_overflow_display ++;
+ 155   1        t3_overflow_temp ++;
+ 156   1        //ogni volta che va in overflow (100ms)
+ 157   1        flag_mma = 1;
+ 158   1        if(t3_overflow_display == 3)
+ 159   1        {
+ 160   2          flag_display = 1;
+ 161   2          t3_overflow_display = 0;
+ 162   2        }
+ 163   1        
+ 164   1        if(t3_overflow_temp == 10)
+ 165   1        {
+ 166   2          flag_temp = 1;
+ 167   2          t3_overflow_temp = 0;
+ 168   2        }
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 4   
 
- 169                                            **********************************************************
- 170          */
- 171          
- 172          //resetta il timer 2 senza fermarlo
- 173          void resetTimer2()
- 174          {
- 175   1        TF2 = 0;
- 176   1        TH2 = 0xf9;
- 177   1        TL2 = 0x7e; 
- 178   1      }
- 179          
- 180          void setLumi()
- 181          {
- 182   1        resetTimer2();
- 183   1        TR2 = 1;
- 184   1      }
- 185          
- 186          //quando il timer va in iinterrupt sono passati 200 ms, incrementa di poco la luminosità del backlight
- 187          void timer2() interrupt 5
- 188          {
- 189   1        char lumiStep = 1;
- 190   1        lumi = lumi + lumiStep;
+ 169   1        
+ 170   1        TMR3H = 0xbe;
+ 171   1        TMR3L = 0xe6;
+ 172   1        //resetta flag overflow
+ 173   1        TMR3CN &= 0x7f;
+ 174   1      }
+ 175          /*
+ 176                                            **********************************************************
+ 177                                            ***********************GESTIONE PWM***********************
+ 178                                            **********************************************************
+ 179          */
+ 180          
+ 181          //resetta il timer 2 senza fermarlo
+ 182          void resetTimer2()
+ 183          {
+ 184   1        TF2 = 0;
+ 185   1        TH2 = 0xf9;
+ 186   1        TL2 = 0x7e; 
+ 187   1      }
+ 188          
+ 189          void setLumi()
+ 190          {
  191   1        resetTimer2();
- 192   1      }
- 193          
- 194          //resetta il timer per contare 200ms, e t1overFlow a 0 per contare 1s
- 195          void resetTimer1()
- 196          {
- 197   1          t1overFlow = 0;
- 198   1          TF1 = 0;
- 199   1          TH1 = 0x7d;
- 200   1          TL1 = 0xcb; 
- 201   1          TR1 = 0;
- 202   1      }
- 203          
- 204          //immma_posta il necessario per il programma
- 205          void pwm_setup()
- 206          {
- 207   1        //timer 0 a 8 bbit, timer 1 a 16 bbit
- 208   1        TMOD = 0x10;
- 209   1        //clock intero per il timer0
- 210   1        CKCON = 0x8;
- 211   1        //luminosità iniziale del backlight, 0 = luminosità massima
- 212   1        lumi = 0;
- 213   1        //abilita gli iinterrupt di timer0, timer1 e timer2
- 214   1        ET0 = 1;
- 215   1        ET1 = 1;
- 216   1        ET2 = 1;
- 217   1        //immma_posta il valore iniziale del timer 1 (conta 200 ms)
- 218   1        TH1 = 0x7d;
- 219   1        TL1 = 0xcb;
- 220   1        //fa partire il timer 0 che gestisce pwm
- 221   1        TR0 = 1;
- 222   1      }
- 223           
- 224          //iinterrupt del timer0
- 225          void timer0() interrupt 1
- 226          {
- 227   1        //il backlight lampeggia solo se la variabile è a 1
- 228   1        if (acceso == 1)
- 229   1        {
- 230   2          if (!backlight) { 
-C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 16:18:01 PAGE 5   
+ 192   1        TR2 = 1;
+ 193   1      }
+ 194          
+ 195          //quando il timer va in iinterrupt sono passati 200 ms, incrementa di poco la luminosità del backlight
+ 196          void timer2() interrupt 5
+ 197          {
+ 198   1        char lumiStep = 1;
+ 199   1        lumi = lumi + lumiStep;
+ 200   1        resetTimer2();
+ 201   1      }
+ 202          
+ 203          //resetta il timer per contare 200ms, e t1overFlow a 0 per contare 1s
+ 204          void resetTimer1()
+ 205          {
+ 206   1          t1overFlow = 0;
+ 207   1          TF1 = 0;
+ 208   1          TH1 = 0x7d;
+ 209   1          TL1 = 0xcb; 
+ 210   1          TR1 = 0;
+ 211   1      }
+ 212          
+ 213          //immma_posta il necessario per il programma
+ 214          void pwm_setup()
+ 215          {
+ 216   1        //timer 0 a 8 bbit, timer 1 a 16 bbit
+ 217   1        TMOD = 0x10;
+ 218   1        //clock intero per il timer0
+ 219   1        CKCON = 0x8;
+ 220   1        //luminosità iniziale del backlight, 0 = luminosità massima
+ 221   1        lumi = 0;
+ 222   1        //abilita gli iinterrupt di timer0, timer1 e timer2
+ 223   1        ET0 = 1;
+ 224   1        ET1 = 1;
+ 225   1        ET2 = 1;
+ 226   1        //immma_posta il valore iniziale del timer 1 (conta 200 ms)
+ 227   1        TH1 = 0x7d;
+ 228   1        TL1 = 0xcb;
+ 229   1        //fa partire il timer 0 che gestisce pwm
+ 230   1        TR0 = 1;
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 5   
 
- 231   3            backlight = 1;    // cambia stato backlight
- 232   3            TH0 = lumi; 
- 233   3            TF0 = 0;    //pulisce flag interrput
- 234   3          }
- 235   2          else {      
- 236   3            backlight = 0;
- 237   3            TH0 = 255 - lumi; 
- 238   3            TF0 = 0;
- 239   3          }
- 240   2        }
- 241   1      }
- 242          
- 243          void buttonInt() interrupt 19
- 244          {
- 245   1        //se non stavo premendo il bottone e lo premo
- 246   1        if(premuto == 0)
- 247   1        {
- 248   2          //fa partire il timer che deve contare 1 secondo
- 249   2          TR1 = 1;
- 250   2          //resetta l'interrupt
- 251   2          EIE2 |= 0x20;
- 252   2          P3IF &= 0x7f;
- 253   2          //cambia in rising edge per avere un interruptt al rilascio del bottone
- 254   2          P3IF |= 0x08;
- 255   2          premuto = 1;
- 256   2        }
- 257   1        //se sto premendo il bottone e quando rilascio non è passato un secondo, deve cambiare lo stato del backl
+ 231   1      }
+ 232           
+ 233          //iinterrupt del timer0
+ 234          void timer0() interrupt 1
+ 235          {
+ 236   1        //il backlight lampeggia solo se la variabile è a 1
+ 237   1        if (acceso == 1)
+ 238   1        {
+ 239   2          if (!backlight) { 
+ 240   3            backlight = 1;    // cambia stato backlight
+ 241   3            TH0 = lumi; 
+ 242   3            TF0 = 0;    //pulisce flag interrput
+ 243   3          }
+ 244   2          else {      
+ 245   3            backlight = 0;
+ 246   3            TH0 = 255 - lumi; 
+ 247   3            TF0 = 0;
+ 248   3          }
+ 249   2        }
+ 250   1      }
+ 251          
+ 252          void buttonInt() interrupt 19
+ 253          {
+ 254   1        //se non stavo premendo il bottone e lo premo
+ 255   1        if(premuto == 0)
+ 256   1        {
+ 257   2          //fa partire il timer che deve contare 1 secondo
+ 258   2          TR1 = 1;
+ 259   2          //resetta l'interrupt
+ 260   2          EIE2 |= 0x20;
+ 261   2          P3IF &= 0x7f;
+ 262   2          //cambia in rising edge per avere un interruptt al rilascio del bottone
+ 263   2          P3IF |= 0x08;
+ 264   2          premuto = 1;
+ 265   2        }
+ 266   1        //se sto premendo il bottone e quando rilascio non è passato un secondo, deve cambiare lo stato del backl
              -ight
- 258   1        else if (premuto == 1 && unSec == 0)
- 259   1        {
- 260   2          //resetto l'interrupt
- 261   2          EIE2 |= 0x20;
- 262   2          P3IF &= 0x7f;
- 263   2          //rimette in falling edge il bottone
- 264   2          P3IF &= 0x77;
- 265   2          //cambio stato backlight
- 266   2          acceso = !acceso;
- 267   2          backlight = 0;
- 268   2          premuto = 0;
- 269   2          unSec = 0;
- 270   2          //resetto e disabilito il timer
- 271   2          resetTimer1();
- 272   2        }
- 273   1        //se lascio il bottone ma è passato più di un secondo
- 274   1        else if (premuto == 1 && unSec == 1)
- 275   1        {
- 276   2          //devo fermare il timer2 usato per regolare la luminosità
- 277   2          TR2 = 0;
- 278   2          resetTimer2();
- 279   2          premuto = 0;
- 280   2          unSec = 0;
- 281   2          //resetta e disabilito il timer
- 282   2          resetTimer1();
- 283   2          //resetta l'interrupt
- 284   2          EIE2 |= 0x20;
- 285   2          P3IF &= 0x7f;
- 286   2          //rimette in falling edge il bottone
- 287   2          P3IF &= 0x77;
- 288   2        }
- 289   1      }
- 290          
- 291          void timer1() interrupt 3
-C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 16:18:01 PAGE 6   
+ 267   1        else if (premuto == 1 && unSec == 0)
+ 268   1        {
+ 269   2          //resetto l'interrupt
+ 270   2          EIE2 |= 0x20;
+ 271   2          P3IF &= 0x7f;
+ 272   2          //rimette in falling edge il bottone
+ 273   2          P3IF &= 0x77;
+ 274   2          //cambio stato backlight
+ 275   2          acceso = !acceso;
+ 276   2          backlight = 0;
+ 277   2          premuto = 0;
+ 278   2          unSec = 0;
+ 279   2          //resetto e disabilito il timer
+ 280   2          resetTimer1();
+ 281   2        }
+ 282   1        //se lascio il bottone ma è passato più di un secondo
+ 283   1        else if (premuto == 1 && unSec == 1)
+ 284   1        {
+ 285   2          //devo fermare il timer2 usato per regolare la luminosità
+ 286   2          TR2 = 0;
+ 287   2          resetTimer2();
+ 288   2          premuto = 0;
+ 289   2          unSec = 0;
+ 290   2          //resetta e disabilito il timer
+ 291   2          resetTimer1();
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 6   
 
- 292          {
- 293   1        t1overFlow++;
- 294   1        //se il contatore è a 5 significa che è passato 1 secondo
- 295   1        if(t1overFlow == 5)
- 296   1        {
- 297   2          //fermo il timer
- 298   2          resetTimer1();
- 299   2          unSec = 1;
- 300   2          //immma_posto la luminosità solo se il bottone è acceso
- 301   2          if (acceso == 1)
- 302   2          {
- 303   3            setLumi();
- 304   3          }
- 305   2        }
- 306   1        else
- 307   1        {
- 308   2          TF1 = 0;
- 309   2          TH1 = 0x7d;
- 310   2          TL1 = 0xcb; 
- 311   2        }
- 312   1      }
- 313          
- 314          /*
- 315                                            **********************************************************
- 316                                            ***********************ACCELEROMETRO**********************
- 317                                            **********************************************************
- 318          */
- 319          
- 320          void accelerometer_interrupt()
- 321          {
- 322   1        
- 323   1        if(mma_pos == sizeof(mma_init))
- 324   1            {
- 325   2              mma_pos = 0;
- 326   2              mma_init_finished = 1;
- 327   2              STO = 1;
- 328   2              //STA = 1;
- 329   2            }
- 330   1            switch(SMB0STA)
- 331   1            {
- 332   2              case SMB_START:
- 333   2                SMB0DAT = MMA_WRITE;
- 334   2                STA = 0;
- 335   2                //smBusy = 1;
- 336   2                break;
- 337   2              
- 338   2              //gli devo dare indirizzo di lettura
- 339   2              case SMB_RESTART:
- 340   2                SMB0DAT = MMA_READ;
- 341   2                STA = 0;
- 342   2                break;
- 343   2      
- 344   2              case SMB_FIRSTWRITE:
- 345   2              case SMB_WRITE:
- 346   2                if(mma_init_finished == 0)
- 347   2                {
- 348   3                  SMB0DAT = mma_init[mma_pos];
- 349   3                  mma_pos++;
- 350   3                }
- 351   2                else if(mma_init_finished == 2)
- 352   2                {
- 353   3                  if(!mma_read_ready)
-C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 16:18:01 PAGE 7   
+ 292   2          //resetta l'interrupt
+ 293   2          EIE2 |= 0x20;
+ 294   2          P3IF &= 0x7f;
+ 295   2          //rimette in falling edge il bottone
+ 296   2          P3IF &= 0x77;
+ 297   2        }
+ 298   1      }
+ 299          
+ 300          void timer1() interrupt 3
+ 301          {
+ 302   1        t1overFlow++;
+ 303   1        //se il contatore è a 5 significa che è passato 1 secondo
+ 304   1        if(t1overFlow == 5)
+ 305   1        {
+ 306   2          //fermo il timer
+ 307   2          resetTimer1();
+ 308   2          unSec = 1;
+ 309   2          //immma_posto la luminosità solo se il bottone è acceso
+ 310   2          if (acceso == 1)
+ 311   2          {
+ 312   3            setLumi();
+ 313   3          }
+ 314   2        }
+ 315   1        else
+ 316   1        {
+ 317   2          TF1 = 0;
+ 318   2          TH1 = 0x7d;
+ 319   2          TL1 = 0xcb; 
+ 320   2        }
+ 321   1      }
+ 322          
+ 323          /*
+ 324                                            **********************************************************
+ 325                                            ***********************ACCELEROMETRO**********************
+ 326                                            **********************************************************
+ 327          */
+ 328          
+ 329          void accelerometer_interrupt()
+ 330          {
+ 331   1        
+ 332   1        if(mma_pos == sizeof(mma_init))
+ 333   1            {
+ 334   2              mma_pos = 0;
+ 335   2              mma_init_finished = 1;
+ 336   2              STO = 1;
+ 337   2              //STA = 1;
+ 338   2            }
+ 339   1            switch(SMB0STA)
+ 340   1            {
+ 341   2              case SMB_START:
+ 342   2                SMB0DAT = MMA_WRITE;
+ 343   2                STA = 0;
+ 344   2                //smBusy = 1;
+ 345   2                break;
+ 346   2              
+ 347   2              //gli devo dare indirizzo di lettura
+ 348   2              case SMB_RESTART:
+ 349   2                SMB0DAT = MMA_READ;
+ 350   2                STA = 0;
+ 351   2                break;
+ 352   2      
+ 353   2              case SMB_FIRSTWRITE:
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 7   
 
- 354   3                  {
- 355   4                    SMB0DAT = XOUT;
- 356   4                    //dice che mma è pronto a leggere
- 357   4                    mma_read_ready = 1;
- 358   4                  }
- 359   3                  else
- 360   3                    STA = 1;
- 361   3                }
- 362   2                break;
- 363   2                
- 364   2              case SMB_FIRSTREAD:
- 365   2                STA = 0;
- 366   2                break;
- 367   2              
- 368   2              case SMB_READ:
- 369   2                mma_value_read = SMB0DAT;
- 370   2                mma_value_read &= 00111111;
- 371   2                xyz[xyz_mma_pos] = TILT_XY[mma_value_read];
- 372   2                if(xyz_mma_pos == 1)
- 373   2                  AA = 0;
- 374   2              
- 375   2                xyz_mma_pos++;
- 376   2                break;
- 377   2              
- 378   2              case SMB_READ_NACK:
+ 354   2              case SMB_WRITE:
+ 355   2                if(mma_init_finished == 0)
+ 356   2                {
+ 357   3                  SMB0DAT = mma_init[mma_pos];
+ 358   3                  mma_pos++;
+ 359   3                }
+ 360   2                else if(mma_init_finished == 2)
+ 361   2                {
+ 362   3                  if(!mma_read_ready)
+ 363   3                  {
+ 364   4                    SMB0DAT = XOUT;
+ 365   4                    //dice che mma è pronto a leggere
+ 366   4                    mma_read_ready = 1;
+ 367   4                  }
+ 368   3                  else
+ 369   3                    STA = 1;
+ 370   3                }
+ 371   2                break;
+ 372   2                
+ 373   2              case SMB_FIRSTREAD:
+ 374   2                STA = 0;
+ 375   2                break;
+ 376   2              
+ 377   2              case SMB_READ:
+ 378   2                mma_value_read = SMB0DAT;
  379   2                mma_value_read &= 00111111;
- 380   2                xyz[xyz_mma_pos] = TILT_Z[mma_value_read];
- 381   2                STO = 1;
- 382   2                AA = 1;
- 383   2                //reset flag e variabili
- 384   2                smBusy = 0;
- 385   2                flag_mma = 0;
- 386   2                mma_read_ready = 0;
- 387   2                xyz_mma_pos = 0;
- 388   2              
- 389   2                buffer_x[buffer_pos] = xyz[0];
- 390   2                buffer_y[buffer_pos] = xyz[1];
- 391   2                buffer_z[buffer_pos] = xyz[2];
- 392   2              
- 393   2                if(buffer_pos == 7)
- 394   2                  buffer_pos = 0;
- 395   2                else
- 396   2                  buffer_pos ++;
- 397   2                
- 398   2            }
- 399   1            SI = 0;
- 400   1      }
- 401          
- 402          void display_interrupt()
- 403          {
- 404   1        
- 405   1        switch(SMB0STA)
- 406   1        {
- 407   2          //primo start
- 408   2          case SMB_START:
- 409   2            //smBusy = 1;
- 410   2            SMB0DAT = DISPLAY_WRITE; // carica indirizzo slave display
- 411   2            STA = 0;
- 412   2            break;
- 413   2          
- 414   2          case SMB_FIRSTWRITE:
- 415   2          case SMB_WRITE:
-C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 16:18:01 PAGE 8   
+ 380   2                xyz[xyz_mma_pos] = TILT_XY[mma_value_read];
+ 381   2                if(xyz_mma_pos == 1)
+ 382   2                  AA = 0;
+ 383   2              
+ 384   2                xyz_mma_pos++;
+ 385   2                break;
+ 386   2              
+ 387   2              case SMB_READ_NACK:
+ 388   2                mma_value_read &= 00111111;
+ 389   2                xyz[xyz_mma_pos] = TILT_Z[mma_value_read];
+ 390   2                STO = 1;
+ 391   2                AA = 1;
+ 392   2                //reset flag e variabili
+ 393   2                smBusy = 0;
+ 394   2                flag_mma = 0;
+ 395   2                mma_read_ready = 0;
+ 396   2                xyz_mma_pos = 0;
+ 397   2              
+ 398   2                buffer_x[buffer_pos] = xyz[0];
+ 399   2                buffer_y[buffer_pos] = xyz[1];
+ 400   2                buffer_z[buffer_pos] = xyz[2];
+ 401   2              
+ 402   2                if(buffer_pos == 7)
+ 403   2                  buffer_pos = 0;
+ 404   2                else
+ 405   2                  buffer_pos ++;
+ 406   2                
+ 407   2            }
+ 408   1            SI = 0;
+ 409   1      }
+ 410          
+ 411          void display_interrupt()
+ 412          {
+ 413   1        
+ 414   1        switch(SMB0STA)
+ 415   1        {
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 8   
 
- 416   2            if(display_init == 0)
- 417   2            {
- 418   3              SMB0DAT = display_init_values[display_init_pos];
- 419   3              display_init_pos++;
- 420   3            }
- 421   2            //scritture successive all'init
- 422   2           else if (display_init == 2)
- 423   2            {
- 424   3              SMB0DAT = display_values[cont];
- 425   3              cont++;
- 426   3              if(cont == sizeof(display_values))
- 427   3              {
- 428   4                STO = 1;
- 429   4                smBusy = 0;
- 430   4                flag_display = 0;
- 431   4                cont = 0;
- 432   4              }
- 433   3                
- 434   3            }
- 435   2            break;
- 436   2        }
- 437   1        
- 438   1        SI = 0;
- 439   1      
- 440   1        if (display_init == 1)
- 441   1        {
- 442   2          display_init = 2;
- 443   2          smBusy = 0;
- 444   2        }
- 445   1          //gli serve un altro giro per fermarsi
- 446   1        else if (display_init_pos == sizeof(display_init_values))
- 447   1        {
- 448   2          display_init_pos = 0;
- 449   2          display_init = 1;
- 450   2          STO = 1;
- 451   2          flag_display = 0;
- 452   2        }
- 453   1        
- 454   1      }
- 455          
- 456          void temp_interrupt()
- 457          {
- 458   1        
- 459   1      }
- 460          
- 461          void smBus() interrupt 7
- 462          {
- 463   1        if(interrupt_type == 0)
- 464   1          accelerometer_interrupt();
- 465   1        else if (interrupt_type == 1)
- 466   1          display_interrupt();
- 467   1        else
- 468   1          temp_interrupt();
- 469   1      }
- 470          
- 471          void average_xyz()
- 472          {
- 473   1        for(avg_cont = 0; avg_cont < sizeof(buffer_x); avg_cont++)
- 474   1        {
- 475   2          avg_x += buffer_x[avg_cont];
- 476   2          avg_y += buffer_y[avg_cont];
- 477   2          avg_z += buffer_z[avg_cont];
-C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 16:18:01 PAGE 9   
+ 416   2          //primo start
+ 417   2          case SMB_START:
+ 418   2            //smBusy = 1;
+ 419   2            SMB0DAT = DISPLAY_WRITE; // carica indirizzo slave display
+ 420   2            STA = 0;
+ 421   2            break;
+ 422   2          
+ 423   2          case SMB_FIRSTWRITE:
+ 424   2          case SMB_WRITE:
+ 425   2            if(display_init == 0)
+ 426   2            {
+ 427   3              SMB0DAT = display_init_values[display_init_pos];
+ 428   3              display_init_pos++;
+ 429   3            }
+ 430   2            //scritture successive all'init
+ 431   2           else if (display_init == 2)
+ 432   2            {
+ 433   3              SMB0DAT = display_values[cont];
+ 434   3              cont++;
+ 435   3              if(cont == sizeof(display_values))
+ 436   3              {
+ 437   4                STO = 1;
+ 438   4                smBusy = 0;
+ 439   4                flag_display = 0;
+ 440   4                cont = 0;
+ 441   4              }
+ 442   3                
+ 443   3            }
+ 444   2            break;
+ 445   2        }
+ 446   1        
+ 447   1        SI = 0;
+ 448   1      
+ 449   1        if (display_init == 1)
+ 450   1        {
+ 451   2          display_init = 2;
+ 452   2          smBusy = 0;
+ 453   2        }
+ 454   1          //gli serve un altro giro per fermarsi
+ 455   1        else if (display_init_pos == sizeof(display_init_values))
+ 456   1        {
+ 457   2          display_init_pos = 0;
+ 458   2          display_init = 1;
+ 459   2          STO = 1;
+ 460   2          flag_display = 0;
+ 461   2        }
+ 462   1        
+ 463   1      }
+ 464          
+ 465          void temp_interrupt()
+ 466          {
+ 467   1        switch(SMB0STA)
+ 468   1        {
+ 469   2          case SMB_START:
+ 470   2            SMB0DAT = TEMP_READ;
+ 471   2            STA = 0;
+ 472   2            break;
+ 473   2          case SMB_FIRSTREAD:
+ 474   2            STA = 0;
+ 475   2            break;
+ 476   2          case SMB_READ:
+ 477   2            if(readH == 0)
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 9   
 
- 478   2        }
- 479   1        avg_x /= sizeof(buffer_x);
- 480   1        avg_y /= sizeof(buffer_y);
- 481   1        avg_z /= sizeof(buffer_z);
- 482   1        
- 483   1        display_values[12] = avg_x / 10;
- 484   1        display_values[13] = avg_x % 10;
- 485   1      }
- 486          
- 487          void main()
- 488          {
- 489   1        init();
- 490   1        pwm_setup();
- 491   1        mma_initialize();
- 492   1        timer3_init();
- 493   1        while(1)
- 494   1        {
- 495   2          if(flag_mma == 1){
- 496   3            interrupt_type = 0;
- 497   3            STA = 1;
- 498   3            smBusy = 1;
- 499   3            while(smBusy)
- 500   3              average_xyz();
- 501   3          }
- 502   2          if (flag_display == 1){
- 503   3            interrupt_type = 1;
- 504   3            STA = 1;
- 505   3            smBusy = 1;
- 506   3            while(smBusy)
- 507   3              average_xyz();
- 508   3          }
- 509   2          /*
- 510   2          if (flag_temp == 1){
- 511   2            interrupt_type = 2;
- 512   2            STA = 1;  
- 513   2            while(smBusy);
- 514   2          }*/
- 515   2          
- 516   2        }
- 517   1      }
+ 478   2            {
+ 479   3              tempH = SMB0DAT;
+ 480   3              readH = 1;
+ 481   3            }
+ 482   2            else
+ 483   2            {
+ 484   3              //calcola la parte bassa della temperatura
+ 485   3              tempL = SMB0DAT;
+ 486   3              temp_int = (tempH << 8 | tempL);
+ 487   3              //calcola la temperatura reale
+ 488   3              temp_float = (float)( temp_int >> 3 ) / 16;
+ 489   3              //per scrivere sul display estraggo decine e unità
+ 490   3              decine = (int)temp_float / 10 + 48;
+ 491   3              unita = (int)temp_float % 10 + 48;
+ 492   3              
+ 493   3              display_values[5] = (char)decine;
+ 494   3              display_values[6] = (char)unita;
+ 495   3              
+ 496   3              STO = 1;
+ 497   3              smBusy = 0;
+ 498   3            }
+ 499   2            break;
+ 500   2        }
+ 501   1      }
+ 502          
+ 503          void smBus() interrupt 7
+ 504          {
+ 505   1        if(interrupt_type == 0)
+ 506   1          accelerometer_interrupt();
+ 507   1        else if (interrupt_type == 1)
+ 508   1          display_interrupt();
+ 509   1        else if (interrupt_type == 2)
+ 510   1          temp_interrupt();
+ 511   1      }
+ 512          
+ 513          void average_xyz()
+ 514          {
+ 515   1        for(avg_cont = 0; avg_cont < sizeof(buffer_x); avg_cont++)
+ 516   1        {
+ 517   2          avg_x += buffer_x[avg_cont];
+ 518   2          avg_y += buffer_y[avg_cont];
+ 519   2          avg_z += buffer_z[avg_cont];
+ 520   2        }
+ 521   1        avg_x /= sizeof(buffer_x);
+ 522   1        avg_y /= sizeof(buffer_y);
+ 523   1        avg_z /= sizeof(buffer_z);
+ 524   1        
+ 525   1        display_values[12] = (char)(avg_x / 10 + 48);
+ 526   1        display_values[13] = (char)(avg_x % 10 + 48);
+ 527   1        
+ 528   1        display_values[16] = (char)(avg_y / 10 + 48);
+ 529   1        display_values[17] = (char)(avg_y % 10 + 48);
+ 530   1        
+ 531   1        display_values[20] = (char)(avg_z / 10 + 48);
+ 532   1        display_values[21] = (char)(avg_z % 10 + 48);
+ 533   1      
+ 534   1      }
+ 535          
+ 536          void main()
+ 537          {
+ 538   1        init();
+ 539   1        pwm_setup();
+C51 COMPILER V9.57.0.0   PROGETTO                                                          06/22/2018 18:37:29 PAGE 10  
+
+ 540   1        mma_initialize();
+ 541   1        timer3_init();
+ 542   1        while(1)
+ 543   1        {
+ 544   2          if(flag_mma == 1){
+ 545   3            interrupt_type = 0;
+ 546   3            STA = 1;
+ 547   3            smBusy = 1;
+ 548   3            while(smBusy);
+ 549   3          }
+ 550   2          if (flag_display == 1){
+ 551   3            interrupt_type = 1;
+ 552   3            STA = 1;
+ 553   3            smBusy = 1;
+ 554   3            while(smBusy);
+ 555   3          }
+ 556   2          average_xyz();
+ 557   2          
+ 558   2          /*if (flag_temp == 1){
+ 559   2            interrupt_type = 2;
+ 560   2            AA = 1;
+ 561   2            STA = 1;
+ 562   2            smBusy = 1;
+ 563   2            while(smBusy);
+ 564   2          }*/
+ 565   2          
+ 566   2        }
+ 567   1      }
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =   1404    ----
+   CODE SIZE        =   2015    ----
    CONSTANT SIZE    =    512    ----
-   XDATA SIZE       =    171    ----
+   XDATA SIZE       =    118    ----
    PDATA SIZE       =   ----    ----
    DATA SIZE        =   ----    ----
    IDATA SIZE       =   ----    ----
