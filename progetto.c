@@ -140,8 +140,6 @@ void mma_initialize()
 	flag_mma = 1;
 	STA = 1;
 	while(!mma_init_finished);
-	//STO = 1;
-	//for(i = 0; i < 1000; i++);
 	mma_init_finished = 2;
 	flag_mma = 0;
 	smBusy = 0;
@@ -495,9 +493,13 @@ void temp_interrupt()
 				
 				STO = 1;
 				smBusy = 0;
+				readH = 0;
+				flag_temp = 0;
 			}
 			break;
 	}
+	
+	SI = 0;
 }
 
 void smBus() interrupt 7
@@ -555,13 +557,12 @@ void main()
 		}
 		average_xyz();
 		
-		/*if (flag_temp == 1){
+		if (flag_temp == 1){
 			interrupt_type = 2;
-			AA = 1;
 			STA = 1;
 			smBusy = 1;
 			while(smBusy);
-		}*/
+		}
 		
 	}
 }
