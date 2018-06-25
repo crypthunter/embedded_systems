@@ -80,13 +80,15 @@ code float TILT_Z[64] = {90.00, 87.31, 84.62, 81.92, 79.19, 76.45, 73.67, 70.84,
 
 //---------------------------------------DISPLAY---------------------------------------------
 unsigned char display_init_values[] = {0x38, 0x39, 0x14, 0x74, 0x54, 0x6F, 0x0C, 0x0F, 0x01};
-unsigned char display_values[] = {0x80, 0x01, 0x40, 'T',':', '2', '0', 0x80, 0xC0, 0x40, 'X', ':', '2' , '0', 'Y', ':', '5', '0', 'Z', ':', '4', '0'};
+unsigned char display_values[] = {0x80, 0x01, 0x40, 'T',':', '2', '0'};
+unsigned char display_values2[] = {0x80, 0xC0, 0x40, 'X', ':', '2' , '0', 'Y', ':', '5', '0', 'Z', ':', '4', '0'};
 //variabile che indica se l'init è finito
 unsigned char display_init = 0;
 unsigned char display_init_pos = 0;
 unsigned char cont = 0;
-unsigned char cont1 = 0;
 unsigned char write_finished = 0;
+//indica se devo scrivere sulla prima o sulla seconda linea
+unsigned char second_line = 0;
 //---------------------------------------TEMPERATURA-----------------------------------------
 int tempH = 0;
 int tempL = 0;
@@ -418,7 +420,7 @@ void display_interrupt()
 	{
 		//primo start
 		case SMB_START:
-			//smBusy = 1;
+			cont = 0;
 			SMB0DAT = DISPLAY_WRITE; // carica indirizzo slave display
 			STA = 0;
 			break;
@@ -433,14 +435,29 @@ void display_interrupt()
 			//scritture successive all'init
 		 else if (display_init == 2)
 			{
-				SMB0DAT = display_values[cont];
-				cont++;
-				if(cont == sizeof(display_values))
+				if(second_line == 0)
 				{
-					STO = 1;
-					smBusy = 0;
-					flag_display = 0;
-					cont = 0;
+					SMB0DAT = display_values[cont];
+					if(cont == sizeof(display_values))
+					{
+						STO = 1;
+						STA = 1;
+						second_line = 1;
+					}
+					cont++;
+					
+				}
+				else
+				{
+					SMB0DAT = display_values2[cont];
+					if(cont == sizeof(display_values2))
+					{
+						STO = 1;
+						smBusy = 0;
+						flag_display = 0;
+						second_line = 0;
+					}
+					cont++;
 				}
 					
 			}
@@ -529,14 +546,14 @@ void average_xyz()
 	avg_y /= sizeof(buffer_y);
 	avg_z /= sizeof(buffer_z);
 	
-	display_values[12] = (char)(avg_x / 10 + 48);
-	display_values[13] = (char)(avg_x % 10 + 48);
+	display_values2[5] = (char)(avg_x / 10 + 48);
+	display_values2[6] = (char)(avg_x % 10 + 48);
 	
-	display_values[16] = (char)(avg_y / 10 + 48);
-	display_values[17] = (char)(avg_y % 10 + 48);
+	display_values2[9] = (char)(avg_y / 10 + 48);
+	display_values2[10] = (char)(avg_y % 10 + 48);
 	
-	display_values[20] = (char)(avg_z / 10 + 48);
-	display_values[21] = (char)(avg_z % 10 + 48);
+	display_values2[13] = (char)(avg_z / 10 + 48);
+	display_values2[14] = (char)(avg_z % 10 + 48);
 
 }
 
