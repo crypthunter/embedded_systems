@@ -1,37 +1,31 @@
 #include <c8051f020.h> // SFR definitions
 
 //---------------------------------------------------VARIABILI----------------------------------------------------------------------
-// 0 accelerometro, 1 temperatura, 2 display
-unsigned char select_interrupt;
 //quante volte va in overflow
 unsigned char t3_overflow_display = 0;
 unsigned char t3_overflow_temp = 0;
+//flag che indicano che va servito l'smbus per le varie periferiche
 unsigned char flag_mma = 0;
 unsigned char flag_temp = 0;
 unsigned char flag_display = 0;
+//indica che il bus è occupato da una periferica
 unsigned char smBusy = 0;
 //tipo di azione che deve fare smbus
 // 0 = mma, 1 = display, 2 = temperatura
 unsigned char interrupt_type = 0;
-//variabili per la media
-unsigned char avg_cont = 0;
-int avg_x = 0;
-int avg_y = 0;
-int avg_z = 0;
 //------------------------------------------------------PWM--------------------------------------------------------------------------
-//bottone e backlight
+//bottone e retroilluminazione
 sbit button = P3^7;
 sbit backlight = P0^6;
-//contatore per il timer1
+//contatore per overflow timer1
 unsigned char t1overFlow = 0;
 // 0 = bottone non premuto, 1 = bottone premuto
 unsigned char premuto = 0;
 //se è passato più di un secondo da quando il bottone è stato premuto
 unsigned char unSec = 0;
-//variabile per decidere se il backlight deve lampeggiare ( molto velocemente così da sembrare ad una luminosità differente)
-//oppure restare spento
+//schermo accesso o spento
 unsigned char acceso = 1;
-//variabile per controllare la luminosità
+//variabili per controllare la luminosità
 unsigned char lumi;
 char lumiStep = 1;
 //--------------------------------------------COSTANTI PERIFERICHE-----------------------------------------------------------------
@@ -58,30 +52,39 @@ char lumiStep = 1;
 #define 	YOUT				0x01
 #define 	ZOUT				0x02
 #define 	MODE				0x07
-
+//valori per inizializzare accelerometro
 unsigned char mma_init [] = {MODE, 0x01};
 unsigned char mma_pos = 0;
 unsigned char mma_init_finished = 0;
+//mma può iniziare a leggere
 unsigned char mma_read_ready = 0;
-
-char buffer_x[8] = {99, 99, 99, 99, 99, 99, 99, 99};
-char buffer_y[8] = {99, 99, 99, 99, 99, 99, 99, 99};
-char buffer_z[8] = {99, 99, 99, 99, 99, 99, 99, 99};
+//buffer per i valori letti dall'accelerometro
+char buffer_x[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+char buffer_y[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+char buffer_z[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 unsigned char buffer_pos = 0;
-
 int mma_value_read = 0;
 int i = 0;
+//memorizzazione temporanea di x y z
 float xyz[3];
 unsigned char xyz_mma_pos = 0;
-code float TILT_XY[64] = {0, 2.69, 5.38, 8.08, 10.81, 13.55, 16.33, 19.16, 22.02, 24.95, 27.95, 31.04, 34.23, 37.54, 41.01, 44.68, 48.59, 52.83, 57.54, 62.95, 69.64, 79.86, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+//variabili per la media
+unsigned char avg_cont = 0;
+int avg_x = 0;
+int avg_y = 0;
+int avg_z = 0;
+//array per la conversione dei valori letti dall'accelerometro
+float TILT_XY[64] = {0, 2.69, 5.38, 8.08, 10.81, 13.55, 16.33, 19.16, 22.02, 24.95, 27.95, 31.04, 34.23, 37.54, 41.01, 44.68, 48.59, 52.83, 57.54, 62.95, 69.64, 79.86, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
   0, 0, 0, 0, 0, 0, 0, -79.86, -69.64, -62.95, -57.54, -52.83, -48.59, -44.68, -41.01, -37.54, -34.23, -31.04, -27.95, -24.95, -22.02, -19.16, -16.33, -13.55, -10.81, -8.08, -5.38, -2.69}; 
-code float TILT_Z[64] = {90.00, 87.31, 84.62, 81.92, 79.19, 76.45, 73.67, 70.84, 67.98, 65.05, 62.05, 58.96, 55.77, 52.46, 48.99, 45.32, 41.41, 37.17, 32.46, 27.05, 20.36, 10.14, 0, 0, 0, 0, 0, 0, 
+float TILT_Z[64] = {90.00, 87.31, 84.62, 81.92, 79.19, 76.45, 73.67, 70.84, 67.98, 65.05, 62.05, 58.96, 55.77, 52.46, 48.99, 45.32, 41.41, 37.17, 32.46, 27.05, 20.36, 10.14, 0, 0, 0, 0, 0, 0, 
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -10.14, -20.36, -27.05, -32.46, -37.17, -41.41, -45.32, -48.99, -52.46, -55.77, -58.96, -62.05, -65.05, -67.98, -70.84, -73.67, -76.45, -79.19, -81.92, -84.62};
-
 //---------------------------------------DISPLAY---------------------------------------------
-unsigned char display_init_values[] = {0x38, 0x39, 0x14, 0x74, 0x54, 0x6F, 0x0C, 0x0F, 0x01};
-unsigned char display_values[] = {0x80, 0x01, 0x40, 'T',':', '2', '0'};
-unsigned char display_values2[] = {0x80, 0xC0, 0x40, 'X', ':', '2' , '0', 'Y', ':', '5', '0', 'Z', ':', '4', '0'};
+//valori per inizializzare il display
+unsigned char display_init_values[] = {0x38, 0x39, 0x14, 0x74, 0x54, 0x6F, 0x0C, 0x01};
+//valori prima riga
+unsigned char display_values[] = {0x80, 0x01, 0x40, 'T',':', '0', '0', 0xF2, 'C'};
+//valori seconda riga
+unsigned char display_values2[] = {0x80, 0xC0, 0x40, 'X', ':', '0' , '0', ' ', 'Y', ':', '0', '0', ' ', 'Z', ':', '0', '0'};
 //variabile che indica se l'init è finito
 unsigned char display_init = 0;
 unsigned char display_init_pos = 0;
@@ -90,6 +93,7 @@ unsigned char write_finished = 0;
 //indica se devo scrivere sulla prima o sulla seconda linea
 unsigned char second_line = 0;
 //---------------------------------------TEMPERATURA-----------------------------------------
+//parte alta e bassa della temperatura
 int tempH = 0;
 int tempL = 0;
 //variabile che indica se ho letto la parte alta della temperatura
@@ -139,7 +143,6 @@ void timer3_init()
 
 void mma_initialize()
 {
-	//altrimenti non entra nell'interrupt
 	flag_mma = 1;
 	STA = 1;
 	while(!mma_init_finished);
@@ -156,12 +159,13 @@ void timer3() interrupt 14
 	t3_overflow_temp ++;
 	//ogni volta che va in overflow (100ms)
 	flag_mma = 1;
+	//quando passano 300ms
 	if(t3_overflow_display == 3)
 	{
 		flag_display = 1;
 		t3_overflow_display = 0;
 	}
-	
+	//quando passa 1 secondo
 	if(t3_overflow_temp == 10)
 	{
 		flag_temp = 1;
@@ -193,7 +197,7 @@ void setLumi()
 	TR2 = 1;
 }
 
-//quando il timer va in iinterrupt sono passati 200 ms, incrementa di poco la luminosità del backlight
+//quando il timer va in iinterrupt sono passati 200 ms, incrementa di poco la luminosità del display
 void timer2() interrupt 5
 {
 	
@@ -205,7 +209,7 @@ void timer2() interrupt 5
 	resetTimer2();
 }
 
-//resetta il timer per contare 200ms, e t1overFlow a 0 per contare 1s
+//resetta il timer per contare 200ms, e t1overFlow a 0 per contare 1 secondo
 void resetTimer1()
 {
 		t1overFlow = 0;
@@ -215,36 +219,36 @@ void resetTimer1()
 		TR1 = 0;
 }
 
-//immma_posta il necessario per il programma
+//imposta il necessario per il programma
 void pwm_setup()
 {
-	//timer 0 a 8 bbit, timer 1 a 16 bbit
+	//timer 0 a 8 bit, timer 1 a 16 bit
 	TMOD = 0x10;
 	//clock intero per il timer0
 	CKCON = 0x8;
-	//luminosità iniziale del backlight, 0 = luminosità massima
+	//luminosità iniziale del display, 0 = luminosità massima
 	lumi = 0;
-	//abilita gli iinterrupt di timer0, timer1 e timer2
+	//abilita gli interrupt di timer0, timer1 e timer2
 	ET0 = 1;
 	ET1 = 1;
 	ET2 = 1;
-	//immma_posta il valore iniziale del timer 1 (conta 200 ms)
+	//imposta il valore iniziale del timer 1 (conta 200 ms)
 	TH1 = 0x7d;
 	TL1 = 0xcb;
 	//fa partire il timer 0 che gestisce pwm
 	TR0 = 1;
 }
  
-//iinterrupt del timer0
+//interrupt del timer0
 void timer0() interrupt 1
 {
 	//il backlight lampeggia solo se la variabile è a 1
 	if (acceso == 1)
 	{
 		if (!backlight) {	
-			backlight = 1;		// cambia stato backlight
+			backlight = 1;		// cambia stato display
 			TH0 = lumi;	
-			TF0 = 0;		//pulisce flag interrput
+			TF0 = 0;
 		}
 		else {			
 			backlight = 0;
@@ -268,7 +272,7 @@ void buttonInt() interrupt 19
 		P3IF |= 0x08;
 		premuto = 1;
 	}
-	//se sto premendo il bottone e quando rilascio non è passato un secondo, deve cambiare lo stato del backlight
+	//se sto premendo il bottone e quando rilascio non è passato un secondo, deve cambiare lo stato del display
 	else if (premuto == 1 && unSec == 0)
 	{
 		//resetto l'interrupt
@@ -276,7 +280,7 @@ void buttonInt() interrupt 19
 		P3IF &= 0x7f;
 		//rimette in falling edge il bottone
 		P3IF &= 0x77;
-		//cambio stato backlight
+		//cambio stato display
 		acceso = !acceso;
 		backlight = 0;
 		premuto = 0;
@@ -311,7 +315,7 @@ void timer1() interrupt 3
 		//fermo il timer
 		resetTimer1();
 		unSec = 1;
-		//immma_posto la luminosità solo se il bottone è acceso
+		//imposto la luminosità solo se il bottone è acceso
 		if (acceso == 1)
 		{
 			setLumi();
@@ -339,17 +343,15 @@ void accelerometer_interrupt()
 				mma_pos = 0;
 				mma_init_finished = 1;
 				STO = 1;
-				//STA = 1;
 			}
 			switch(SMB0STA)
 			{
 				case SMB_START:
 					SMB0DAT = MMA_WRITE;
 					STA = 0;
-					//smBusy = 1;
 					break;
 				
-				//gli devo dare indirizzo di lettura
+				//gli devo dare indirizzo del registro da leggere
 				case SMB_RESTART:
 					SMB0DAT = MMA_READ;
 					STA = 0;
@@ -357,11 +359,13 @@ void accelerometer_interrupt()
 
 				case SMB_FIRSTWRITE:
 				case SMB_WRITE:
+					//se sta facendo l'init
 					if(mma_init_finished == 0)
 					{
 						SMB0DAT = mma_init[mma_pos];
 						mma_pos++;
 					}
+					//se sta leggendo x y z
 					else if(mma_init_finished == 2)
 					{
 						if(!mma_read_ready)
@@ -382,6 +386,7 @@ void accelerometer_interrupt()
 				case SMB_READ:
 					mma_value_read = SMB0DAT;
 					mma_value_read &= 00111111;
+					//converte i valori letti in gradi
 					xyz[xyz_mma_pos] = TILT_XY[mma_value_read];
 					if(xyz_mma_pos == 1)
 						AA = 0;
@@ -389,6 +394,7 @@ void accelerometer_interrupt()
 					xyz_mma_pos++;
 					break;
 				
+				// legge z e inserisce nel buffer x y z
 				case SMB_READ_NACK:
 					mma_value_read &= 00111111;
 					xyz[xyz_mma_pos] = TILT_Z[mma_value_read];
@@ -408,7 +414,6 @@ void accelerometer_interrupt()
 						buffer_pos = 0;
 					else
 						buffer_pos ++;
-					
 			}
 			SI = 0;
 }
@@ -418,7 +423,6 @@ void display_interrupt()
 	
 	switch(SMB0STA)
 	{
-		//primo start
 		case SMB_START:
 			cont = 0;
 			SMB0DAT = DISPLAY_WRITE; // carica indirizzo slave display
@@ -427,6 +431,7 @@ void display_interrupt()
 		
 		case SMB_FIRSTWRITE:
 		case SMB_WRITE:
+			//se sta facendo l'init
 			if(display_init == 0)
 			{
 				SMB0DAT = display_init_values[display_init_pos];
@@ -435,6 +440,7 @@ void display_interrupt()
 			//scritture successive all'init
 		 else if (display_init == 2)
 			{
+				//scrittura prima riga
 				if(second_line == 0)
 				{
 					SMB0DAT = display_values[cont];
@@ -445,8 +451,8 @@ void display_interrupt()
 						second_line = 1;
 					}
 					cont++;
-					
 				}
+				//scrittura seconda riga
 				else
 				{
 					SMB0DAT = display_values2[cont];
@@ -471,7 +477,6 @@ void display_interrupt()
 		display_init = 2;
 		smBusy = 0;
 	}
-		//gli serve un altro giro per fermarsi
 	else if (display_init_pos == sizeof(display_init_values))
 	{
 		display_init_pos = 0;
@@ -494,6 +499,7 @@ void temp_interrupt()
 			STA = 0;
 			break;
 		case SMB_READ:
+			//se sta leggendo la parte alta della temperatura
 			if(readH == 0)
 			{
 				tempH = SMB0DAT;
@@ -504,12 +510,12 @@ void temp_interrupt()
 				//calcola la parte bassa della temperatura
 				tempL = SMB0DAT;
 				temp_int = (tempH << 8 | tempL);
-				//calcola la temperatura reale
+				//converte la temperatura in gradi centigradi
 				temp_float = (float)( temp_int >> 3 ) / 16;
 				//per scrivere sul display estraggo decine e unità
 				decine = (int)temp_float / 10 + 48;
 				unita = (int)temp_float % 10 + 48;
-				
+				//sostituisco i valori nell'array della prima riga del display
 				display_values[5] = (char)decine;
 				display_values[6] = (char)unita;
 				
@@ -536,55 +542,60 @@ void smBus() interrupt 7
 
 void average_xyz()
 {
+	//somma i valori nei buffer
 	for(avg_cont = 0; avg_cont < sizeof(buffer_x); avg_cont++)
 	{
 		avg_x += buffer_x[avg_cont];
 		avg_y += buffer_y[avg_cont];
 		avg_z += buffer_z[avg_cont];
 	}
+	//fa la media di ogni asse
 	avg_x /= sizeof(buffer_x);
 	avg_y /= sizeof(buffer_y);
 	avg_z /= sizeof(buffer_z);
 	
+	//scrive i valori nell'array della seconda riga del display
 	display_values2[5] = (char)(avg_x / 10 + 48);
 	display_values2[6] = (char)(avg_x % 10 + 48);
 	
-	display_values2[9] = (char)(avg_y / 10 + 48);
-	display_values2[10] = (char)(avg_y % 10 + 48);
+	display_values2[10] = (char)(avg_y / 10 + 48);
+	display_values2[11] = (char)(avg_y % 10 + 48);
 	
-	display_values2[13] = (char)(avg_z / 10 + 48);
-	display_values2[14] = (char)(avg_z % 10 + 48);
-
+	display_values2[15] = (char)(avg_z / 10 + 48);
+	display_values2[16] = (char)(avg_z % 10 + 48);
 }
 
 void main()
 {
+	//init vari
 	init();
 	pwm_setup();
 	mma_initialize();
 	timer3_init();
+	
+	//serve la periferica solo se il suo flag è a 1, e se il bus è libero
 	while(1)
 	{
-		if(flag_mma == 1){
+		if(flag_mma && !smBusy){
 			interrupt_type = 0;
 			STA = 1;
 			smBusy = 1;
-			while(smBusy);
 		}
-		if (flag_display == 1){
+		
+		if (flag_display && !smBusy){
 			interrupt_type = 1;
 			STA = 1;
 			smBusy = 1;
-			while(smBusy);
 		}
-		average_xyz();
 		
-		if (flag_temp == 1){
+		if (flag_temp && !smBusy){
 			interrupt_type = 2;
 			STA = 1;
 			smBusy = 1;
-			while(smBusy);
 		}
 		
+		//se nessun flag è alzato c'è tempo per fare la media
+		if(!flag_mma && !flag_display && !flag_temp)
+			average_xyz();
 	}
 }
